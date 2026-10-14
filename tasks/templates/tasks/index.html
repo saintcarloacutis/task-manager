@@ -74,13 +74,28 @@
       desc.textContent = task.description;
       info.append(title, desc);
 
-      const editBtn = document.createElement("button");
+            const editBtn = document.createElement("button");
       editBtn.className = "small";
       editBtn.textContent = "Edit";
+      let editing = false;
       editBtn.addEventListener("click", async () => {
-        const newTitle = prompt("Edit task title:", task.title);
-        if (newTitle && newTitle.trim()) {
-          await request(API_URL + task.id + "/", "PATCH", { title: newTitle.trim() });
+        if (!editing) {
+          editing = true;
+          const input = document.createElement("input");
+          input.type = "text";
+          input.value = task.title;
+          input.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") editBtn.click();
+            if (e.key === "Escape") loadTasks();
+          });
+          title.replaceWith(input);
+          input.focus();
+          editBtn.textContent = "Save";
+        } else {
+          const newTitle = info.querySelector("input").value.trim();
+          if (newTitle) {
+            await request(API_URL + task.id + "/", "PATCH", { title: newTitle });
+          }
           loadTasks();
         }
       });
