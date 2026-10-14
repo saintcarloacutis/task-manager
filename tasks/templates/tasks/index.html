@@ -5,28 +5,189 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Task Manager</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 16px; }
-    h1 { text-align: center; }
-    form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
-    input, button { padding: 10px; font-size: 16px; }
-    ul { list-style: none; padding: 0; }
-    li { display: flex; align-items: center; gap: 10px; padding: 10px; border-bottom: 1px solid #ddd; }
-    .info { flex: 1; }
-    .done .title { text-decoration: line-through; color: #888; }
-    .desc { font-size: 14px; color: #666; }
-    .small { font-size: 14px; padding: 6px 10px; cursor: pointer; }
+    :root {
+      --ease: cubic-bezier(.22, 1, .36, 1);
+      --spring: cubic-bezier(.34, 1.56, .64, 1);
+      --text: #fff;
+      --muted: rgba(255, 255, 255, .68);
+      --stroke: rgba(255, 255, 255, .38);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      font-family: "Segoe UI Variable Display", "SF Pro Display", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: #0d1230;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Colorful backdrop that the glass refracts */
+    .bg {
+      position: fixed; inset: 0; z-index: -1; overflow: hidden;
+      background: linear-gradient(140deg, #1a1d52 0%, #3b1d6e 50%, #0e4a7c 100%);
+    }
+    .blob { position: absolute; border-radius: 50%; filter: blur(70px); animation: drift 22s ease-in-out infinite alternate; }
+    .b1 { width: 440px; height: 440px; background: #ff6ec4; top: -120px; left: -120px; opacity: .7; }
+    .b2 { width: 500px; height: 500px; background: #3ea6ff; bottom: -160px; right: -140px; opacity: .7; animation-duration: 28s; }
+    .b3 { width: 320px; height: 320px; background: #6ff0c4; top: 42%; left: 58%; opacity: .45; animation-duration: 34s; }
+    @keyframes drift { to { transform: translate(70px, -60px) scale(1.18); } }
+
+    /* The glass itself */
+    .glass {
+      background: linear-gradient(135deg, rgba(255, 255, 255, .24), rgba(255, 255, 255, .07));
+      -webkit-backdrop-filter: blur(26px) saturate(180%);
+      backdrop-filter: blur(26px) saturate(180%);
+      border: 1px solid var(--stroke);
+      box-shadow:
+        0 10px 34px rgba(5, 8, 30, .35),
+        inset 0 1.5px 0 rgba(255, 255, 255, .55),
+        inset 0 -1px 0 rgba(255, 255, 255, .1);
+    }
+    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+      .glass { background: rgba(40, 44, 100, .85); }
+    }
+
+    .app { max-width: 640px; margin: 0 auto; padding: 56px 16px 80px; }
+    h1 { margin: 0; text-align: center; font-size: 40px; font-weight: 700; letter-spacing: -.02em; }
+    #count { margin: 6px 0 28px; text-align: center; color: var(--muted); font-size: 15px; }
+
+    /* Add form */
+    #task-form { display: flex; flex-direction: column; gap: 12px; padding: 20px; border-radius: 30px; margin-bottom: 20px; }
+    input[type="text"] {
+      width: 100%; padding: 14px 18px; border-radius: 18px;
+      font: inherit; font-size: 16px; color: var(--text);
+      background: rgba(255, 255, 255, .12);
+      border: 1px solid rgba(255, 255, 255, .28);
+      outline: none;
+      transition: background .3s var(--ease), border-color .3s var(--ease), box-shadow .3s var(--ease), transform .3s var(--ease);
+    }
+    input[type="text"]::placeholder { color: rgba(255, 255, 255, .55); }
+    input[type="text"]:focus {
+      background: rgba(255, 255, 255, .2);
+      border-color: rgba(255, 255, 255, .7);
+      box-shadow: 0 0 0 4px rgba(255, 255, 255, .14);
+      transform: scale(1.01);
+    }
+    .btn-main {
+      padding: 14px; border-radius: 18px; cursor: pointer;
+      font: inherit; font-size: 16px; font-weight: 600; color: #fff;
+      background: linear-gradient(135deg, rgba(255, 255, 255, .42), rgba(255, 255, 255, .16));
+      border: 1px solid rgba(255, 255, 255, .5);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .6), 0 6px 18px rgba(5, 8, 30, .25);
+      transition: transform .35s var(--spring), box-shadow .3s var(--ease), background .3s var(--ease);
+    }
+    .btn-main:hover { transform: translateY(-2px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7), 0 10px 24px rgba(5, 8, 30, .3); }
+    .btn-main:active { transform: scale(.97); }
+
+    /* Filter control with a sliding highlight */
+    #filters {
+      --i: 0;
+      position: relative; display: grid; grid-template-columns: repeat(3, 1fr);
+      padding: 4px; border-radius: 999px; margin-bottom: 20px;
+    }
+    #filters::before {
+      content: ""; position: absolute; top: 4px; bottom: 4px; left: 4px;
+      width: calc((100% - 8px) / 3); border-radius: 999px;
+      background: rgba(255, 255, 255, .3);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .65), 0 4px 14px rgba(5, 8, 30, .25);
+      transform: translateX(calc(var(--i) * 100%));
+      transition: transform .55s var(--spring);
+    }
+    #filters button {
+      position: relative; padding: 10px 0; border: 0; background: none; cursor: pointer;
+      font: inherit; font-size: 15px; font-weight: 600; color: var(--muted);
+      transition: color .3s var(--ease);
+    }
+    #filters button[aria-pressed="true"] { color: #fff; }
+
+    /* Task list */
+    #task-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+    .task {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 16px; border-radius: 24px;
+      transition: transform .4s var(--ease), opacity .3s var(--ease), box-shadow .3s var(--ease);
+    }
+    .task:hover { transform: translateY(-2px); }
+    .task.enter { animation: rise .6s var(--ease) backwards; }
+    .task.leaving { opacity: 0; transform: translateX(48px) scale(.92); pointer-events: none; }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(18px) scale(.96); filter: blur(6px); }
+    }
+
+    /* Custom checkbox with a drawn checkmark */
+    .check-wrap { position: relative; display: block; flex: none; cursor: pointer; }
+    .check-wrap input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+    .check {
+      display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+      border: 2px solid rgba(255, 255, 255, .65);
+      background: rgba(255, 255, 255, .1);
+      transition: background .35s var(--ease), border-color .35s var(--ease), transform .45s var(--spring);
+    }
+    .check svg { width: 16px; height: 16px; fill: none; stroke: #fff; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 24; stroke-dashoffset: 24; transition: stroke-dashoffset .4s var(--ease) .08s; }
+    .check-wrap input:checked + .check { background: linear-gradient(135deg, #5af0b4, #3ea6ff); border-color: transparent; transform: scale(1.08); }
+    .check-wrap input:checked + .check svg { stroke-dashoffset: 0; }
+    .check-wrap input:active + .check { transform: scale(.88); }
+    .check-wrap input:focus-visible + .check { box-shadow: 0 0 0 4px rgba(255, 255, 255, .4); }
+
+    .info { flex: 1; min-width: 0; }
+    .title {
+      display: inline; font-size: 17px; font-weight: 600; overflow-wrap: anywhere;
+      background: linear-gradient(currentColor, currentColor) no-repeat 0 58% / 0 2px;
+      transition: background-size .45s var(--ease), opacity .35s var(--ease);
+    }
+    .task.done .title { background-size: 100% 2px; opacity: .55; }
+    .desc { margin-top: 3px; font-size: 14px; color: var(--muted); overflow-wrap: anywhere; }
+    .info input[type="text"] { padding: 8px 12px; border-radius: 12px; font-size: 16px; font-weight: 600; }
+
+    .btn-small {
+      padding: 8px 15px; border-radius: 999px; cursor: pointer;
+      font: inherit; font-size: 13px; font-weight: 600; color: #fff;
+      background: rgba(255, 255, 255, .13);
+      border: 1px solid rgba(255, 255, 255, .3);
+      transition: transform .35s var(--spring), background .3s var(--ease);
+    }
+    .btn-small:hover { background: rgba(255, 255, 255, .26); transform: translateY(-1px); }
+    .btn-small:active { transform: scale(.93); }
+    .btn-small.danger:hover { background: rgba(255, 92, 110, .5); }
+
+    .empty { padding: 34px 20px; text-align: center; color: var(--muted); border-radius: 24px; animation: rise .6s var(--ease) backwards; }
+
+    @media (max-width: 480px) {
+      h1 { font-size: 32px; }
+      .task { flex-wrap: wrap; }
+      .info { flex-basis: calc(100% - 50px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { animation: none !important; transition: none !important; }
+    }
   </style>
 </head>
 <body>
-  <h1>Task Manager</h1>
+  <div class="bg" aria-hidden="true">
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+    <div class="blob b3"></div>
+  </div>
 
-  <form id="task-form">
-    <input type="text" id="title" placeholder="Task title" required>
-    <input type="text" id="description" placeholder="Description (optional)">
-    <button type="submit">Add task</button>
-  </form>
+  <main class="app">
+    <h1>Task Manager</h1>
+    <p id="count" aria-live="polite"></p>
 
-  <ul id="task-list"></ul>
+    <form id="task-form" class="glass">
+      <input type="text" id="title" placeholder="Task title" required>
+      <input type="text" id="description" placeholder="Description (optional)">
+      <button type="submit" class="btn-main">Add task</button>
+    </form>
+
+    <div id="filters" class="glass" role="group" aria-label="Filter tasks">
+      <button type="button" data-filter="all" aria-pressed="true">All</button>
+      <button type="button" data-filter="active" aria-pressed="false">Active</button>
+      <button type="button" data-filter="completed" aria-pressed="false">Completed</button>
+    </div>
+
+    <ul id="task-list"></ul>
+  </main>
 
   <script>
     const csrfToken = "{{ csrf_token }}";
@@ -34,6 +195,12 @@
 
     const list = document.getElementById("task-list");
     const form = document.getElementById("task-form");
+    const filters = document.getElementById("filters");
+    const countEl = document.getElementById("count");
+
+    let tasks = [];
+    let currentFilter = "all";
+    const seen = new Set();
 
     async function request(url, method = "GET", body = null) {
       const options = {
@@ -47,79 +214,174 @@
     }
 
     async function loadTasks() {
-      const tasks = await request(API_URL);
+      tasks = await request(API_URL);
+      render();
+    }
+
+    function updateCount() {
+      const left = tasks.filter((t) => !t.completed).length;
+      countEl.textContent = tasks.length
+        ? left + " of " + tasks.length + " tasks left"
+        : "No tasks yet";
+    }
+
+    function visibleTasks() {
+      return tasks.filter((t) => {
+        if (currentFilter === "active") return !t.completed;
+        if (currentFilter === "completed") return t.completed;
+        return true;
+      });
+    }
+
+    function render(animateAll = false) {
       list.innerHTML = "";
-      tasks.forEach(renderTask);
+      const items = visibleTasks();
+
+      if (!items.length) {
+        const empty = document.createElement("li");
+        empty.className = "empty glass";
+        empty.textContent = tasks.length ? "Nothing in this view." : "Add your first task above.";
+        list.appendChild(empty);
+      }
+
+      items.forEach((task, i) => {
+        const li = renderTask(task);
+        if (animateAll || !seen.has(task.id)) {
+          li.classList.add("enter");
+          li.style.animationDelay = Math.min(i, 8) * 55 + "ms";
+        }
+        seen.add(task.id);
+        list.appendChild(li);
+      });
+      updateCount();
     }
 
     function renderTask(task) {
       const li = document.createElement("li");
-      if (task.completed) li.classList.add("done");
+      li.className = "task glass" + (task.completed ? " done" : "");
 
+      const wrap = document.createElement("label");
+      wrap.className = "check-wrap";
       const checkbox = document.createElement("input");
       checkbox.type = "checkbox";
       checkbox.checked = task.completed;
+      checkbox.setAttribute("aria-label", "Mark \"" + task.title + "\" as done");
+      const box = document.createElement("span");
+      box.className = "check";
+      box.innerHTML = '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+      wrap.append(checkbox, box);
+
       checkbox.addEventListener("change", async () => {
-        await request(API_URL + task.id + "/", "PATCH", { completed: checkbox.checked });
-        loadTasks();
+        task.completed = checkbox.checked;
+        li.classList.toggle("done", checkbox.checked);
+        updateCount();
+        try {
+          await request(API_URL + task.id + "/", "PATCH", { completed: checkbox.checked });
+        } catch (err) {
+          console.error(err);
+          await loadTasks();
+          return;
+        }
+        if (currentFilter !== "all") {
+          setTimeout(() => li.classList.add("leaving"), 350);
+          setTimeout(() => render(), 650);
+        }
       });
 
       const info = document.createElement("div");
       info.className = "info";
-      const title = document.createElement("div");
+      const title = document.createElement("span");
       title.className = "title";
       title.textContent = task.title;
-      const desc = document.createElement("div");
-      desc.className = "desc";
-      desc.textContent = task.description;
-      info.append(title, desc);
+      info.appendChild(title);
+      if (task.description) {
+        const desc = document.createElement("div");
+        desc.className = "desc";
+        desc.textContent = task.description;
+        info.appendChild(desc);
+      }
 
-            const editBtn = document.createElement("button");
-      editBtn.className = "small";
+      const editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "btn-small";
       editBtn.textContent = "Edit";
-      let editing = false;
+      let input = null;
       editBtn.addEventListener("click", async () => {
-        if (!editing) {
-          editing = true;
-          const input = document.createElement("input");
+        if (!input) {
+          input = document.createElement("input");
           input.type = "text";
           input.value = task.title;
           input.addEventListener("keydown", (e) => {
             if (e.key === "Enter") editBtn.click();
-            if (e.key === "Escape") loadTasks();
+            if (e.key === "Escape") render();
           });
           title.replaceWith(input);
           input.focus();
           editBtn.textContent = "Save";
         } else {
-          const newTitle = info.querySelector("input").value.trim();
-          if (newTitle) {
-            await request(API_URL + task.id + "/", "PATCH", { title: newTitle });
+          const newTitle = input.value.trim();
+          if (newTitle && newTitle !== task.title) {
+            task.title = newTitle;
+            try {
+              await request(API_URL + task.id + "/", "PATCH", { title: newTitle });
+            } catch (err) {
+              console.error(err);
+              await loadTasks();
+              return;
+            }
           }
-          loadTasks();
+          render();
         }
       });
 
       const deleteBtn = document.createElement("button");
-      deleteBtn.className = "small";
+      deleteBtn.type = "button";
+      deleteBtn.className = "btn-small danger";
       deleteBtn.textContent = "Delete";
       deleteBtn.addEventListener("click", async () => {
-        await request(API_URL + task.id + "/", "DELETE");
-        loadTasks();
+        li.classList.add("leaving");
+        try {
+          await Promise.all([
+            request(API_URL + task.id + "/", "DELETE"),
+            new Promise((resolve) => setTimeout(resolve, 320)),
+          ]);
+          tasks = tasks.filter((t) => t.id !== task.id);
+          seen.delete(task.id);
+          render();
+        } catch (err) {
+          console.error(err);
+          li.classList.remove("leaving");
+        }
       });
 
-      li.append(checkbox, info, editBtn, deleteBtn);
-      list.appendChild(li);
+      li.append(wrap, info, editBtn, deleteBtn);
+      return li;
     }
+
+    filters.querySelectorAll("button").forEach((btn, index) => {
+      btn.addEventListener("click", () => {
+        currentFilter = btn.dataset.filter;
+        filters.style.setProperty("--i", index);
+        filters.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b === btn)));
+        render(true);
+      });
+    });
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const title = document.getElementById("title").value.trim();
+      const titleInput = document.getElementById("title");
+      const title = titleInput.value.trim();
       const description = document.getElementById("description").value.trim();
       if (!title) return;
-      await request(API_URL, "POST", { title, description });
-      form.reset();
-      loadTasks();
+      try {
+        const created = await request(API_URL, "POST", { title, description });
+        tasks.unshift(created);
+        form.reset();
+        titleInput.focus();
+        render();
+      } catch (err) {
+        console.error(err);
+      }
     });
 
     loadTasks();
