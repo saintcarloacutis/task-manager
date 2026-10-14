@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Task Manager</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 16px; }
+    h1 { text-align: center; }
+    form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
+    input, button { padding: 10px; font-size: 16px; }
+    ul { list-style: none; padding: 0; }
+    li { display: flex; align-items: center; gap: 10px; padding: 10px; border-bottom: 1px solid #ddd; }
+    .info { flex: 1; }
+    .done .title { text-decoration: line-through; color: #888; }
+    .desc { font-size: 14px; color: #666; }
+    .small { font-size: 14px; padding: 6px 10px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>Task Manager</h1>
+
+  <form id="task-form">
+    <input type="text" id="title" placeholder="Task title" required>
+    <input type="text" id="description" placeholder="Description (optional)">
+    <button type="submit">Add task</button>
+  </form>
+
+  <ul id="task-list"></ul>
+
+  <script>
+    const csrfToken = "{{ csrf_token }}";
+    const API_URL = "/api/tasks/";
+
+    const list = document.getElementById("task-list");
+    const form = document.getElementById("task-form");
+
+    async function request(url, method = "GET", body = null) {
+      const options = {
+        method,
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
+      };
+      if (body) options.body = JSON.stringify(body);
+      const response = await fetch(url, options);
+      if (!response.ok) throw new Error("Request failed: " + response.status);
+      return method === "DELETE" ? null : response.json();
+    }
+
+    async function loadTasks() {
+      const tasks = await request(API_URL);
+      list.innerHTML = "";
+      tasks.forEach(renderTask);
+    }
+
+    function renderTask(task) {
+      const li = document.createElement("li");
+      if (task.completed) li.classList.add("done");
+
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = task.completed;
+      checkbox.addEventListener("change", async () => {
+        await request(API_URL + task.id + "/", "PATCH", { completed: checkbox.checked });
+        loadTasks();
+      });
+
+      const info = document.createElement("div");
+      info.className = "info";
+      const title = document.createElement("div");
+      title.className = "title";
+      title.textContent = task.title;
+      const desc = document.createElement("div");
+      desc.className = "desc";
+      desc.textContent = task.description;
+      info.append(title, desc);
+
+      const editBtn = document.createElement("button");
+      editBtn.className = "small";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", async () => {
+        const newTitle = prompt("Edit task title:", task.title);
+        if (newTitle && newTitle.trim()) {
+          await request(API_URL + task.id + "/", "PATCH", { title: newTitle.trim() });
+          loadTasks();
+        }
+      });
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.className = "small";
+      deleteBtn.textContent = "Delete";
+      deleteBtn.addEventListener("click", async () => {
+        await request(API_URL + task.id + "/", "DELETE");
+        loadTasks();
+      });
+
+      li.append(checkbox, info, editBtn, deleteBtn);
+      list.appendChild(li);
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const title = document.getElementById("title").value.trim();
+      const description = document.getElementById("description").value.trim();
+      if (!title) return;
+      await request(API_URL, "POST", { title, description });
+      form.reset();
+      loadTasks();
+    });
+
+    loadTasks();
+  </script>
+</body>
+</html>
